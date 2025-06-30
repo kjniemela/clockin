@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ClockIn</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <nav>
+      <a href="login.html">Login</a>
+      <a href="signup.html">Sign Up</a>
+      <a href="logout">Logout</a>
+      <p id="usr"></p>
+    </nav>
+    <div id="content">
+      <div class="column">
+        <h3>Hours since <span id="hoursSinceDate"></span>: <span id="hoursSince"></span></h3>
+        <div>
+          <input id="hoursSinceInput" type="date">
+          <input id="hoursSinceSubmit" type="submit" value="Submit">
+          <input id="payrollNow" type="submit" value="Payroll">
+        </div>
+        <h3 style="margin-bottom: 5px;">Hours logged today: <span id="hoursToday"></span></h3>
+        <h3 style="margin-bottom: 5px; margin-top: 0;">Hours logged this week: <span id="hoursThisWeek"></span></h3>
+        <h3 style="margin-bottom: 5px; margin-top: 0;">Hours logged this month: <span id="hoursThisMonth"></span></h3>
+        <h2 id="totalHoursHeading">Total Hours Logged:</h2>
+        <div>
+          <button onclick="hoursTab = 0; updateLists(data)">Per Day</button>
+          <button onclick="hoursTab = 1; updateLists(data)">Per Week</button>
+          <button onclick="hoursTab = 2; updateLists(data)">Per Month</button>
+        </div>
+        <label>
+          <input id="showMemosCheckbox" type="checkbox">
+          <span>Show Memos</span>
+        </label>
+        <ul id="totalHoursList">
+
+        </ul>
+      </div>
+      <div class="column">
+        <div id="btns">
+          <button id="refresh">Refresh</button>
+          <button id="clockBtn">Clock</button>
+          <button id="undoBtn">Undo</button>
+          <fieldset>
+            <legend><b>Clockout Memo</b></legend>
+            <textarea id="memoInput"></textarea>
+          </fieldset>
+          <fieldset>
+            <legend><b>Manual Input</b></legend>
+            <input id="manualClockInput" type="datetime-local">
+            <input id="manualClock" type="submit" value="Submit">
+          </fieldset>
+          <fieldset>
+            <legend><b>Target Hours</b></legend>
+            <input id="targetHoursInput" type="number" step="0.01">
+          </fieldset>
+          <h3>Target clock-out time: <span id="targetClockout"></span></h3>
+        </div>
+      </div>
+      <div class="column">
+        <dl id="log">
+        </dl>
+      </div>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

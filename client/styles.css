@@ -1,0 +1,45 @@
+body {
+  padding: 0;
+  margin: 0;
+}
+
+nav {
+  height: 100px;
+}
+
+textarea {
+  width: 100%;
+}
+
+#content {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-around;
+  height: calc(100vh - 120px);
+}
+
+#btns {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.column {
+  width: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.memo {
+  display: block;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+button {
+  padding: 10px 20px;
+  margin: 5px;
+}
