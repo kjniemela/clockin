@@ -16,6 +16,12 @@ function getWeekNumber(date) {
 async function fetchData() {
   try {
     data = await (await fetch(`data/${user}`)).json();
+    if (data.log.length > 0) {
+      data.clockedIn = data.log[data.log.length - 1].out_time === null;
+    }
+    if (data.payroll.length > 0) {
+      data.lastPayroll = data.payroll[data.payroll.length - 1].pay_time;
+    }
   } catch (err) {
     console.log(err);
     data = null;
@@ -38,31 +44,31 @@ function updateLists(data) {
   const hoursPerMonth = {};
   let hoursSinceLastPayroll = 0;
   let dayDiv = document.createElement('div');
+  const dayLogs = {};
   if (data?.log) {
     const lastPayroll = new Date(data.lastPayroll || 0);
-    let previousDate = null;
-    data.log.forEach(function(entry, index) {
-      const entryElement = document.createElement('dd');
-      const date = new Date(entry[1]);
-      const memo = entry[2] ?? null;
-      const dayKey = date.toLocaleDateString();
-      if (dayKey !== previousDate?.toLocaleDateString()) {
-        const headingElement = document.createElement('dt');
-        headingElement.innerHTML = `${previousDate ? '<br>' : ''}<b>${dayKey}:</b>`
-        logList.prepend(dayDiv);
-        dayDiv = document.createElement('div');
-        dayDiv.prepend(headingElement);
-      }
-      if (!entry[0] && previousDate) {
-        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-        const weekKey = `${date.getFullYear()} - week ${getWeekNumber(date)}`;
+    for (const entry of data.log) {
+      const inDate = new Date(entry.in_time);
+      const outDate = entry.out_time && new Date(entry.out_time);
+      const memo = entry.memo ?? null;
+      const dayKey = inDate.toLocaleDateString();
+      if (!(dayKey in dayLogs)) dayLogs[dayKey] = [];
+      dayLogs[dayKey].push([true, inDate]);
+
+      if (outDate) {
+        const outDayKey = outDate.toLocaleDateString();
+        if (!(outDayKey in dayLogs)) dayLogs[outDayKey] = [];
+        dayLogs[outDayKey].push([false, outDate]);
+
+        const monthKey = `${inDate.getFullYear()}-${inDate.getMonth()}`;
+        const weekKey = `${inDate.getFullYear()} - week ${getWeekNumber(inDate)}`;
         if (!(dayKey in hoursPerDay)) hoursPerDay[dayKey] = 0;
         if (!(dayKey in memosPerDay)) memosPerDay[dayKey] = [];
         if (!(weekKey in memosPerWeek)) memosPerWeek[weekKey] = [];
         if (!(monthKey in memosPerMonth)) memosPerMonth[monthKey] = [];
         if (!(weekKey in hoursPerWeek)) hoursPerWeek[weekKey] = 0;
         if (!(monthKey in hoursPerMonth)) hoursPerMonth[monthKey] = 0;
-        const hours = (date - previousDate) / 1000 / 60 / 60;
+        const hours = (outDate - inDate) / 1000 / 60 / 60;
         hoursPerDay[dayKey] += hours;
         if (memo) {
           memosPerDay[dayKey].push(memo);
@@ -71,24 +77,37 @@ function updateLists(data) {
         }
         hoursPerWeek[weekKey] += hours;
         hoursPerMonth[monthKey] += hours;
-        if (date > lastPayroll) {
+        if (inDate >= lastPayroll) {
           hoursSinceLastPayroll += hours;
         }
       }
-      previousDate = date;
-      entryElement.innerText = `Clocked ${entry[0] ? 'in' : 'out'} at ${date.toLocaleTimeString()}`;
-      entryElement.onclick = function() {
-        console.log(index);
-      };
-      dayDiv.appendChild(entryElement);
-    });
+    }
+    let previousDay = null;
+    for (const dayKey in dayLogs) {
+      if (dayKey !== previousDay) {
+        const headingElement = document.createElement('dt');
+        headingElement.innerHTML = `${previousDay ? '<br>' : ''}<b>${dayKey}:</b>`
+        logList.prepend(dayDiv);
+        dayDiv = document.createElement('div');
+        dayDiv.prepend(headingElement);
+      }
+      for (const [isStart, date] of dayLogs[dayKey]) {
+        const entryElement = document.createElement('dd');
+        entryElement.innerText = `Clocked ${isStart ? 'in' : 'out'} at ${date.toLocaleTimeString()}`;
+        entryElement.onclick = function() {
+          // console.log(index);
+        };
+        dayDiv.appendChild(entryElement);
+        previousDay = dayKey;
+      }
+    }
     logList.prepend(dayDiv);
   }
 
   let currentTime = 0;
 
   if (data?.clockedIn) {
-    const previousTime = new Date(data.log[data.log.length-1][1]);
+    const previousTime = new Date(data.log[data.log.length-1].in_time);
     const key = previousTime.toLocaleDateString();
     const weekKey = `${previousTime.getFullYear()} - week ${getWeekNumber(previousTime)}`;
     const monthKey = `${previousTime.getFullYear()}-${previousTime.getMonth()}`;
@@ -280,7 +299,7 @@ async function main() {
   try {
     sessionData = await (await fetch('verify')).json();
     document.getElementById('usr').innerText = `Logged in as: ${sessionData.user.email}`;
-    user = sessionData.userId;
+    user = sessionData.user.id;
     document.getElementById('targetHoursInput').onchange = async function() {
       updateTarget(data);
     }

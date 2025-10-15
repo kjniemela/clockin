@@ -1,6 +1,5 @@
 const express = require('express');
 const path = require('path');
-const fsPromises = require('fs/promises');
 const api = require('./api');
 
 const CookieParser = require('./middleware/cookieParser');
@@ -8,6 +7,12 @@ const Auth = require('./middleware/auth');
 
 const app = express();
 const { ADDR_PREFIX, PORT } = require('./config');
+const { executeQuery } = require('./db/utils');
+
+app.use((req, res, next) => {
+  console.log(req.method, req.path);
+  next();
+})
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -17,7 +22,7 @@ app.use(`${ADDR_PREFIX}/`, express.static(path.join(__dirname, '../client')));
 
 app.get(`${ADDR_PREFIX}/verify`, Auth.verifySession, async (req, res) => {
   try {
-    const data = req.session;
+    const data = structuredClone(req.session);
     if (data.user) {
       delete data.user.password;
       delete data.user.salt;
@@ -31,7 +36,10 @@ app.get(`${ADDR_PREFIX}/verify`, Auth.verifySession, async (req, res) => {
 
 app.get(`${ADDR_PREFIX}/data/:id`, Auth.verifySession, async (req, res) => {
   try {
-    const data = JSON.parse(await fsPromises.readFile(path.join(__dirname, `data/${req.params.id}.json`)));
+    const data = {
+      log: await executeQuery('SELECT * FROM shift WHERE job_id = ? AND user_id = ? ORDER BY in_time', [req.params.id, req.session.user.id]),
+      payroll: await executeQuery('SELECT * FROM payroll WHERE job_id = ? AND user_id = ? ORDER BY pay_time', [req.params.id, req.session.user.id]),
+    };
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -42,9 +50,7 @@ app.get(`${ADDR_PREFIX}/data/:id`, Auth.verifySession, async (req, res) => {
 app.post(`${ADDR_PREFIX}/pay/:id`, Auth.verifySession, async (req, res) => {
   console.log(req.body)
   try {
-    const data = JSON.parse(await fsPromises.readFile(path.join(__dirname, `data/${req.params.id}.json`)));
-    data.lastPayroll = req.body.lastPayroll;
-    await fsPromises.writeFile(path.join(__dirname, `data/${req.params.id}.json`), JSON.stringify(data));
+    await executeQuery('INSERT INTO payroll (pay_time, job_id, user_id) VALUES (?, ?)', [new Date(req.body.lastPayroll), req.params.id, req.session.user.id]);
     res.sendStatus(201);
   } catch (err) {
     console.error(err);
@@ -53,14 +59,16 @@ app.post(`${ADDR_PREFIX}/pay/:id`, Auth.verifySession, async (req, res) => {
 });
 
 app.post(`${ADDR_PREFIX}/clock/:id`, Auth.verifySession, async (req, res) => {
-  console.log(req.body)
   try {
-    const data = JSON.parse(await fsPromises.readFile(path.join(__dirname, `data/${req.params.id}.json`)));
-    if (data.clockedIn !== req.body.state) {
-      data.clockedIn = req.body.state;
-      data.log.push([req.body.state, req.body.time, req.body.memo ?? null]);
+    const date = new Date(req.body.time);
+    const lastLog = (await executeQuery('SELECT * FROM shift WHERE job_id = ? AND user_id = ? ORDER BY in_time DESC', [req.params.id, req.session.user.id]))[0];
+    if (lastLog && lastLog.out_time === null) {
+      if (date < lastLog.in_time) return res.sendStatus(400);
+      await executeQuery('UPDATE shift SET out_time = ? WHERE id = ?', [date, lastLog.id]);
+    } else {
+      if (date < lastLog.out_time) return res.sendStatus(400);
+      await executeQuery('INSERT INTO shift (in_time, job_id, user_id) VALUES (?, ?, ?)', [date, req.params.id, req.session.user.id]);
     }
-    await fsPromises.writeFile(path.join(__dirname, `data/${req.params.id}.json`), JSON.stringify(data));
     res.sendStatus(201);
   } catch (err) {
     console.error(err);
@@ -70,12 +78,14 @@ app.post(`${ADDR_PREFIX}/clock/:id`, Auth.verifySession, async (req, res) => {
 
 app.delete(`${ADDR_PREFIX}/clock/:id`, Auth.verifySession, async (req, res) => {
   try {
-    const data = JSON.parse(await fsPromises.readFile(path.join(__dirname, `data/${req.params.id}.json`)));
-    if (data.log.length > 0) {
-      const oldState = data.log.pop();
-      data.clockedIn = !oldState[0];
+    const lastLog = (await executeQuery('SELECT * FROM shift WHERE job_id = ? AND user_id = ? ORDER BY in_time DESC', [req.params.id, req.session.user.id]))[0];
+    if (lastLog) {
+      if (lastLog.out_time === null) {
+        await executeQuery('DELETE FROM shift WHERE id = ?', [lastLog.id]);
+      } else {
+        await executeQuery('UPDATE shift SET out_time = ? WHERE id = ?', [null, lastLog.id]);
+      }
     }
-    await fsPromises.writeFile(path.join(__dirname, `data/${req.params.id}.json`), JSON.stringify(data));
     res.sendStatus(201);
   } catch (err) {
     console.error(err);
@@ -87,7 +97,7 @@ app.delete(`${ADDR_PREFIX}/clock/:id`, Auth.verifySession, async (req, res) => {
 
 app.get(`${ADDR_PREFIX}/logout`, async (req, res) => {
   try {
-    await api.delete.session({ id: req.session.id })
+    await api.delete.session(req.session.id)
     res.clearCookie('clockinuid', req.session.id);
     res.redirect(`${ADDR_PREFIX}/`);
   } catch (err) {
@@ -98,12 +108,12 @@ app.get(`${ADDR_PREFIX}/logout`, async (req, res) => {
 
 app.post(`${ADDR_PREFIX}/login`, async (req, res) => {
   try {
-    const [errCode, user] = await api.get.user({ email: req.body.email }, true);
+    const [errCode, user] = await api.get.user(req.body.email);
     if (user) {
       req.loginId = user.id;
       const isValidUser = api.validatePassword(req.body.password, user.password, user.salt);
       if (isValidUser) {
-        await api.put.session({ id: req.session.id }, { userId: req.loginId });
+        await api.put.session(req.session.id, req.loginId);
         res.status(200);
         return res.redirect(`${ADDR_PREFIX}/`);
       } else {
@@ -123,7 +133,7 @@ app.post(`${ADDR_PREFIX}/signup`, async (req, res) => {
   try {
     const data = await api.post.user( req.body );
     try {
-      await api.put.session({ id: req.session.id }, { userId: data.insertId });
+      await api.put.session(req.session.id, data.insertId);
       res.status(201);
       return res.redirect(`${ADDR_PREFIX}/`);
     } catch (err) {

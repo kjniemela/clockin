@@ -19,7 +19,7 @@ async function main() {
     const [{ insertId: userId }] = await db.execute('INSERT INTO user (email, salt, password) VALUES (?, ?, ?)', [user.email, user.salt, user.password]);
     const [{ insertId: jobId }] = await db.execute('INSERT INTO job (title) VALUES (?)', [user.email]);
 
-    const { log } = await fetchJSON([user.id]);
+    const { log, lastPayroll } = await fetchJSON([user.id]);
     const sortedLog = log.map(([isOpen, date, memo]) => [isOpen, new Date(date), memo]).sort((a, b) => a[1] > b[1]);
     let currentShift = null;
     for (const [isOpen, date, memo] of sortedLog) {
@@ -35,6 +35,10 @@ async function main() {
         await db.execute('UPDATE shift SET out_time = ?, memo = ? WHERE id = ?', [date, memo || null, currentShift]);
         currentShift = null;
       }
+    }
+
+    if (lastPayroll) {
+      await db.execute('INSERT INTO payroll (pay_time, job_id, user_id) VALUES (?, ?, ?)', [new Date(lastPayroll), jobId, userId]);
     }
   }
   db.end();

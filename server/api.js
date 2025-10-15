@@ -1,65 +1,34 @@
-const fsPromises = require('fs/promises');
 const utils = require('./lib/hashUtils');
-const path = require('path');
-
-const fetchJSON = async (pathList) => {
-  return JSON.parse(
-    await fsPromises.readFile(path.join(__dirname, `data/${pathList.join('/')}.json`))
-  );
-};
-
-const saveJSON = async (pathList, json) => {
-  await fsPromises.writeFile(path.join(__dirname, `data/${pathList.join('/')}.json`), JSON.stringify(json));
-};
-
-const appendJSON = async (pathList, json) => {
-  const data = await fetchJSON(pathList);
-  if (!(data instanceof Array)) throw new TypeError();
-  json.id = data[data.length-1]?.id+1 ?? 0;
-  data.push(json);
-  saveJSON(pathList, data);
-  return { insertId: json.id };
-};
-
-const doesMatch = (keys, entry) => {
-  let match = true;
-  for (const key in keys) {
-    if (keys[key] !== entry[key]) {
-      match = false;
-      break;
-    }
-  }
-  return match;
-};
-
-const findMatch = (keys, array) => {
-  const results = [];
-  for (const entry of array) {
-    if (doesMatch(keys, entry)) results.push(entry);
-  }
-  return results;
-};
+const { executeQuery } = require('./db/utils');
 
 class APIGetMethods {
+  async _session(session) {
+    if (!session || !('user_id' in session)) return session;
+    const users = await executeQuery('SELECT * FROM user WHERE id = ?', [session.user_id]);
+    session.user = users[0];
+    return session;
+  }
+
   /**
    * @param {*} options
    * @returns {Promise<session>}
    */
-  async session(options) {
-    const data = findMatch(options, await fetchJSON(['sessions']));
-    const session = data[0];
-    if (!session || !('userId' in session)) return session;
-    const [_, user] = await api.get.user({ id: session.userId });
-    session.user = user;
-    return session;
+  async session(id) {
+    const sessions = await executeQuery('SELECT * FROM session WHERE id = ?', [id]);
+    return await this._session(sessions[0]);
+  }
+
+  async sessionByHash(hash) {
+    const sessions = await executeQuery('SELECT * FROM session WHERE hash = ?', [hash]);
+    return await this._session(sessions[0]);
   }
 
   /**
    * @param {*} options
    * @returns {Promise<[errCode, user]>}
    */
-   async user(options) {
-    const data = findMatch(options, await fetchJSON(['users']));
+   async user(email) {
+    const data = await executeQuery('SELECT * FROM user WHERE email = ?', [email]);
     const user = data[0];
     return [null, user];
   }
@@ -73,7 +42,7 @@ class APIPostMethods {
   session() {
     const data = utils.createRandom32String();
     const hash = utils.createHash(data);
-    return appendJSON(['sessions'], { hash });
+    return executeQuery('INSERT INTO session (hash, created_at) VALUES (?, ?)', [hash, new Date()]);
   }
 
   /**
@@ -86,19 +55,13 @@ class APIPostMethods {
 
     if (!email) throw new Error('malformed email')
 
-    const newUser = {
+    const newUser = [
       email,
+      utils.createHash(password, salt),
       salt,
-      password: utils.createHash(password, salt)
-    };
+    ];
 
-    const data = await appendJSON(['users'], newUser);
-    await saveJSON([data.insertId], {
-      clockedIn: false,
-      lastPayroll: null,
-      log: [],
-    });
-    return data;
+    return await executeQuery('INSERT INTO user (email, password, salt) VALUES (?, ?, ?)', newUser);
   }
 }
 
@@ -109,16 +72,8 @@ class APIPutMethods {
    * @param {{key: value}} values
    * @returns
    */
-  async session(options, values) {
-    const data = await fetchJSON(['sessions']);
-    for (const entry of data) {
-      if (doesMatch(options, entry)) {
-        for (const key in values) {
-          entry[key] = values[key];
-        }
-      }
-    }
-    return saveJSON(['sessions'], data);
+  async session(id, userId) {
+    await executeQuery('UPDATE session SET user_id = ? WHERE id = ?', [userId, id]);
   }
 }
 
@@ -128,16 +83,8 @@ class APIDeleteMethods {
    * @param {*} options
    * @returns
    */
-   async session(options) {
-    const data = await fetchJSON(['sessions']);
-    for (let i = 0; i < data.length; i++) {
-      const entry = data[i];
-      if (doesMatch(options, entry)) {
-        data.splice(i, 1);
-        i--;
-      }
-    }
-    return saveJSON(['sessions'], data);
+   async session(id) {
+    await executeQuery('DELETE FROM session WHERE id = ?', [id]);
   }
 }
 

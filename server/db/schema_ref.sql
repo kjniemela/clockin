@@ -41,3 +41,11 @@ CREATE TABLE shift (
   FOREIGN KEY (user_id) REFERENCES user (id),
   PRIMARY KEY (id)
 );
+
+CREATE TABLE payroll (
+  pay_time TIMESTAMP NOT NULL,
+  job_id INT NOT NULL,
+  user_id INT NOT NULL,
+  FOREIGN KEY (job_id) REFERENCES job (id),
+  FOREIGN KEY (user_id) REFERENCES user (id)
+);

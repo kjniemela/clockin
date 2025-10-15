@@ -4,7 +4,7 @@ const api = require('../api');
 module.exports.createSession = (req, res, next) => {
   // console.log('res cookie', res.cookie);
   if (req.cookies['clockinid']) {
-    api.get.session({hash: req.cookies['clockinid']})
+    api.get.sessionByHash(req.cookies['clockinid'])
       .then((session) => {
         if (session) {
           // console.log('session:', session.user);
@@ -24,7 +24,7 @@ module.exports.createSession = (req, res, next) => {
         } else {
           api.post.session()
             .then((data) => {
-              return api.get.session({ id: data.insertId });
+              return api.get.session(data.insertId);
             })
             .then((session) => {
               res.cookie('clockinid', session.hash);
@@ -47,7 +47,7 @@ module.exports.createSession = (req, res, next) => {
   } else {
     api.post.session()
     .then((data) => {
-      return api.get.session({ id: data.insertId });
+      return api.get.session(data.insertId);
     })
     .then((session) => {
       // console.log('session:', session)
