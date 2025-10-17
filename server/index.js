@@ -47,10 +47,25 @@ app.get(`${ADDR_PREFIX}/data/:id`, Auth.verifySession, async (req, res) => {
   }
 });
 
+app.get(`${ADDR_PREFIX}/jobs/:userId`, Auth.verifySession, async (req, res) => {
+  try {
+    const jobs = await executeQuery(`
+      SELECT DISTINCT job.*
+      FROM shift
+      INNER JOIN job ON job.id = shift.job_id
+      WHERE shift.user_id = ?
+    `, [req.params.userId]);
+    res.json(jobs);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(404);
+  }
+});
+
 app.post(`${ADDR_PREFIX}/pay/:id`, Auth.verifySession, async (req, res) => {
   console.log(req.body)
   try {
-    await executeQuery('INSERT INTO payroll (pay_time, job_id, user_id) VALUES (?, ?)', [new Date(req.body.lastPayroll), req.params.id, req.session.user.id]);
+    await executeQuery('INSERT INTO payroll (pay_time, job_id, user_id) VALUES (?, ?, ?)', [new Date(req.body.lastPayroll), req.params.id, req.session.user.id]);
     res.sendStatus(201);
   } catch (err) {
     console.error(err);
@@ -60,13 +75,23 @@ app.post(`${ADDR_PREFIX}/pay/:id`, Auth.verifySession, async (req, res) => {
 
 app.post(`${ADDR_PREFIX}/clock/:id`, Auth.verifySession, async (req, res) => {
   try {
-    const date = new Date(req.body.time);
+    const clockNow = req.body.time === null;
+    const date = clockNow ? new Date() : new Date(req.body.time);
     const lastLog = (await executeQuery('SELECT * FROM shift WHERE job_id = ? AND user_id = ? ORDER BY in_time DESC', [req.params.id, req.session.user.id]))[0];
     if (lastLog && lastLog.out_time === null) {
       if (date < lastLog.in_time) return res.sendStatus(400);
       await executeQuery('UPDATE shift SET out_time = ? WHERE id = ?', [date, lastLog.id]);
     } else {
       if (date < lastLog.out_time) return res.sendStatus(400);
+
+      if (clockNow) {
+        // If we're clocked in elsewhere, clock us out
+        const otherShifts = await executeQuery('SELECT id FROM shift WHERE out_time IS NULL AND user_id = ?', [req.session.user.id]);
+        for (const shift of otherShifts) {
+          await executeQuery('UPDATE shift SET out_time = ? WHERE id = ?', [date, shift.id]);
+        }
+      }
+
       await executeQuery('INSERT INTO shift (in_time, job_id, user_id) VALUES (?, ?, ?)', [date, req.params.id, req.session.user.id]);
     }
     res.sendStatus(201);

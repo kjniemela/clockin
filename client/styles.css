@@ -4,11 +4,20 @@ body {
 }
 
 nav {
-  height: 100px;
+  display: flex;
+  justify-content: space-between;
 }
 
 textarea {
   width: 100%;
+}
+
+#jobs {
+  display: flex;
+  justify-content: center;
+  align-items: start;
+  flex-wrap: wrap;
+  min-height: 80px;
 }
 
 #content {

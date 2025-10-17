@@ -2,7 +2,9 @@ let data = {};
 let hoursLoggedToday = 0;
 let hoursTab = 0;
 let sessionData;
+let jobs;
 let user;
+let job;
 
 function getWeekNumber(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -15,7 +17,7 @@ function getWeekNumber(date) {
 
 async function fetchData() {
   try {
-    data = await (await fetch(`data/${user}`)).json();
+    data = await (await fetch(`data/${job.id}`)).json();
     if (data.log.length > 0) {
       data.clockedIn = data.log[data.log.length - 1].out_time === null;
     }
@@ -26,7 +28,18 @@ async function fetchData() {
     console.log(err);
     data = null;
   }
-  console.log(data)
+  // document.getElementById('job').innerText = `Job: ${job.title}`;
+  document.getElementById('jobs').innerHTML = '';
+  for (const jobItem of jobs) {
+    const btn = document.createElement('button');
+    btn.disabled = job.id === jobItem.id;
+    btn.innerText = jobItem.title;
+    btn.onclick = () => {
+      job = jobItem;
+      fetchData();
+    };
+    document.getElementById('jobs').appendChild(btn);
+  }
   updateLists(data);
   updateBtns(data);
   updateTarget(data);
@@ -198,7 +211,7 @@ function updateLists(data) {
   const hoursSinceInput = document.getElementById('hoursSinceInput');
   const hoursSinceSubmit = document.getElementById('hoursSinceSubmit');
   hoursSinceSubmit.onclick = async function() {
-    await fetch(`pay/${user}`, {
+    await fetch(`pay/${job.id}`, {
       method: "post",
       headers: {
         'Accept': 'application/json',
@@ -213,7 +226,7 @@ function updateLists(data) {
 
   const payrollNow = document.getElementById('payrollNow');
   payrollNow.onclick = async function() {
-    await fetch(`pay/${user}`, {
+    await fetch(`pay/${job.id}`, {
       method: "post",
       headers: {
         'Accept': 'application/json',
@@ -233,12 +246,12 @@ function updateBtns(data) {
   clockBtn.onclick = async function() {
     const payload = {
       state: !data.clockedIn,
-      time: new Date(),
+      time: null,
     };
     if (data.clockedIn) {
       payload.memo = document.getElementById('memoInput').value
     }
-    await fetch(`clock/${user}`, {
+    await fetch(`clock/${job.id}`, {
       method: "post",
       headers: {
         'Accept': 'application/json',
@@ -252,7 +265,7 @@ function updateBtns(data) {
 
   const undoBtn = document.getElementById('undoBtn');
   undoBtn.onclick = async function() {
-    await fetch(`clock/${user}`, { method: "delete" });
+    await fetch(`clock/${job.id}`, { method: "delete" });
     fetchData();
   };
 
@@ -268,7 +281,7 @@ function updateBtns(data) {
       if (data.clockedIn) {
         payload.memo = document.getElementById('memoInput').value
       }
-      await fetch(`clock/${user}`, {
+      await fetch(`clock/${job.id}`, {
         method: "post",
         headers: {
           'Accept': 'application/json',
@@ -300,6 +313,8 @@ async function main() {
     sessionData = await (await fetch('verify')).json();
     document.getElementById('usr').innerText = `Logged in as: ${sessionData.user.email}`;
     user = sessionData.user.id;
+    jobs = await (await fetch(`jobs/${user}`)).json();
+    job = jobs[0];
     document.getElementById('targetHoursInput').onchange = async function() {
       updateTarget(data);
     }
