@@ -16,6 +16,13 @@ function getWeekNumber(date) {
 }
 
 async function fetchData() {
+  let dots = 1;
+  document.getElementById('refresh').innerText = ' • '.repeat(dots);
+  const refreshInterval = setInterval(() => {
+    dots = (dots % 3) + 1;
+    document.getElementById('refresh').innerText = ' • '.repeat(dots);
+  }, 200);
+  document.getElementById('refresh').disabled = true;
   try {
     data = await (await fetch(`data/${job.id}`)).json();
     if (data.log.length > 0) {
@@ -27,6 +34,10 @@ async function fetchData() {
   } catch (err) {
     console.log(err);
     data = null;
+  } finally {
+    clearInterval(refreshInterval);
+    document.getElementById('refresh').innerText = 'Refresh';
+    document.getElementById('refresh').disabled = false;
   }
   // document.getElementById('job').innerText = `Job: ${job.title}`;
   document.getElementById('jobs').innerHTML = '';
@@ -310,6 +321,7 @@ function formatTime(t) {
 
 async function main() {
   try {
+    document.getElementById('refresh').disabled = true;
     sessionData = await (await fetch('verify')).json();
     document.getElementById('usr').innerText = `Logged in as: ${sessionData.user.email}`;
     user = sessionData.user.id;
