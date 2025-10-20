@@ -4,7 +4,7 @@ let hoursTab = 0;
 let sessionData;
 let jobs;
 let user;
-let job;
+let job = null;
 
 function getWeekNumber(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -24,7 +24,22 @@ async function fetchData() {
   }, 200);
   document.getElementById('refresh').disabled = true;
   try {
-    data = await (await fetch(`data/${job.id}`)).json();
+    if (job === null) {
+      data = { log: [], payroll: [] };
+      const jobData = {};
+      await Promise.all(jobs.map(async ({ id }) => {
+        jobData[id] = await (await fetch(`data/${id}`)).json();
+      }));
+      for (const { id, title } of jobs) {
+        const { log, payroll } = jobData[id];
+        data.log = data.log.concat(log.map(shift => ({ ...shift, jobTitle: title })));
+        data.payroll = data.payroll.concat(payroll);
+      }
+      data.log.sort((a, b) => a.in_time > b.in_time ? 1 : -1);
+      data.payroll.sort((a, b) => a.pay_time > b.pay_time ? 1 : -1);
+    } else {
+      data = await (await fetch(`data/${job.id}`)).json();
+    }
     if (data.log.length > 0) {
       data.clockedIn = data.log[data.log.length - 1].out_time === null;
     }
@@ -41,9 +56,17 @@ async function fetchData() {
   }
   // document.getElementById('job').innerText = `Job: ${job.title}`;
   document.getElementById('jobs').innerHTML = '';
+  const btn = document.createElement('button');
+  btn.disabled = job === null;
+  btn.innerText = 'All';
+  btn.onclick = () => {
+    job = null;
+    fetchData();
+  };
+  document.getElementById('jobs').appendChild(btn);
   for (const jobItem of jobs) {
     const btn = document.createElement('button');
-    btn.disabled = job.id === jobItem.id;
+    btn.disabled = job && job.id === jobItem.id;
     btn.innerText = jobItem.title;
     btn.onclick = () => {
       job = jobItem;
@@ -77,12 +100,12 @@ function updateLists(data) {
       const memo = entry.memo ?? null;
       const dayKey = inDate.toLocaleDateString();
       if (!(dayKey in dayLogs)) dayLogs[dayKey] = [];
-      dayLogs[dayKey].push([true, inDate]);
+      dayLogs[dayKey].push([true, inDate, entry.jobTitle]);
 
       if (outDate) {
         const outDayKey = outDate.toLocaleDateString();
         if (!(outDayKey in dayLogs)) dayLogs[outDayKey] = [];
-        dayLogs[outDayKey].push([false, outDate]);
+        dayLogs[outDayKey].push([false, outDate, entry.jobTitle]);
 
         const monthKey = `${inDate.getFullYear()}-${inDate.getMonth()}`;
         const weekKey = `${inDate.getFullYear()} - week ${getWeekNumber(inDate)}`;
@@ -115,9 +138,10 @@ function updateLists(data) {
         dayDiv = document.createElement('div');
         dayDiv.prepend(headingElement);
       }
-      for (const [isStart, date] of dayLogs[dayKey]) {
+      for (const [isStart, date, jobTitle] of dayLogs[dayKey]) {
         const entryElement = document.createElement('dd');
-        entryElement.innerText = `Clocked ${isStart ? 'in' : 'out'} at ${date.toLocaleTimeString()}`;
+        const jobStr = job ? '' : ` ${isStart ? 'to' : 'from'} ${jobTitle}`
+        entryElement.innerText = `Clocked ${isStart ? 'in' : 'out'}${jobStr} at ${date.toLocaleTimeString()}`;
         entryElement.onclick = function() {
           // console.log(index);
         };
@@ -221,6 +245,7 @@ function updateLists(data) {
   hoursSinceDate.innerText = new Date(data?.lastPayroll || 0).toLocaleDateString() || '';
   const hoursSinceInput = document.getElementById('hoursSinceInput');
   const hoursSinceSubmit = document.getElementById('hoursSinceSubmit');
+  hoursSinceSubmit.disabled = job === null;
   hoursSinceSubmit.onclick = async function() {
     await fetch(`pay/${job.id}`, {
       method: "post",
@@ -236,6 +261,7 @@ function updateLists(data) {
   };
 
   const payrollNow = document.getElementById('payrollNow');
+  payrollNow.disabled = job === null;
   payrollNow.onclick = async function() {
     await fetch(`pay/${job.id}`, {
       method: "post",
@@ -254,6 +280,7 @@ function updateLists(data) {
 function updateBtns(data) {
   const clockBtn = document.getElementById('clockBtn');
   clockBtn.innerText = `Clock ${data?.clockedIn ? 'Out' : 'In'}`;
+  clockBtn.disabled = job === null;
   clockBtn.onclick = async function() {
     const payload = {
       state: !data.clockedIn,
@@ -275,12 +302,14 @@ function updateBtns(data) {
 
 
   const undoBtn = document.getElementById('undoBtn');
+  undoBtn.disabled = job === null;
   undoBtn.onclick = async function() {
     await fetch(`clock/${job.id}`, { method: "delete" });
     fetchData();
   };
 
   const submitBtn = document.getElementById('manualClock');
+  submitBtn.disabled = job === null;
   submitBtn.onclick = async function() {
     const lastDate = new Date(((data.log[data.log.length-1] ?? [])[1]) ?? 0);
     const newDate = new Date(document.getElementById('manualClockInput').value);
@@ -326,7 +355,6 @@ async function main() {
     document.getElementById('usr').innerText = `Logged in as: ${sessionData.user.email}`;
     user = sessionData.user.id;
     jobs = await (await fetch(`jobs/${user}`)).json();
-    job = jobs[0];
     document.getElementById('targetHoursInput').onchange = async function() {
       updateTarget(data);
     }
