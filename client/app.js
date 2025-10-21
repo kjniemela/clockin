@@ -184,9 +184,15 @@ function updateLists(data) {
   hoursToday.innerText = `${(hoursPerDay[todaysKey] ?? 0).toFixed(2)}hrs`;
   hoursThisWeek.innerText = `${(hoursPerWeek[thisWeekKey] ?? 0).toFixed(2)}hrs`;
   hoursThisMonth.innerText = `${(hoursPerMonth[thisMonthKey] ?? 0).toFixed(2)}hrs`;
-  hoursToday.title = `Est. net: $${((hoursPerDay[todaysKey] ?? 0) * 35 * 0.75).toFixed(2)}`;
-  hoursThisWeek.title = `Est. net: $${((hoursPerWeek[thisWeekKey] ?? 0) * 35 * 0.75).toFixed(2)}`;
-  hoursThisMonth.title = `Est. net: $${((hoursPerMonth[thisMonthKey] ?? 0) * 35 * 0.75).toFixed(2)}`;
+  const [dayGross, weekGross, monthGross] = [
+    hoursPerDay[todaysKey],
+    hoursPerWeek[thisWeekKey],
+    hoursPerMonth[thisMonthKey],
+  ].map(hours => (hours ?? 0) * 35);
+  const [dayNet, weekNet, monthNet] = [dayGross, weekGross, monthGross].map(gross => gross * 0.75);
+  hoursToday.title = `Est. net: $${dayNet.toFixed(2)}\nGross: $${dayGross.toFixed(2)}`;
+  hoursThisWeek.title = `Est. net: $${weekNet.toFixed(2)}\nGross: $${weekGross.toFixed(2)}`;
+  hoursThisMonth.title = `Est. net: $${monthNet.toFixed(2)}\nGross: $${monthGross.toFixed(2)}`;
   if (todaysKey in hoursPerDay) {
     hoursLoggedToday = hoursPerDay[todaysKey];
   }
@@ -225,7 +231,7 @@ function updateLists(data) {
       'November',
       'December',
     ]
-    Object.keys(hoursPerMonth).forEach(function(key) {
+    for (const key of Object.keys(hoursPerMonth)) {
       const [year, month] = key.split('-');
       const entryElement = document.createElement('li');
       entryElement.innerHTML = `${months[month]} ${year}: <b>${hoursPerMonth[key].toFixed(2)}</b>hrs`;
@@ -233,15 +239,16 @@ function updateLists(data) {
         entryElement.innerHTML += `<br><span class="memo">${memosPerMonth[key].join('<br>')}</span><br><br>`;
       }
       hoursList.prepend(entryElement);
-    })
+    }
   }
 
-  const date = new Date();
   const hoursSince = document.getElementById('hoursSince');
   const hoursSinceDate = document.getElementById('hoursSinceDate');
-  const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-  hoursSince.innerText = `${(hoursSinceLastPayroll + currentTime).toFixed(2)}hrs`;
-  hoursSince.title = `Est. net: $${((hoursSinceLastPayroll + currentTime) * 35 * 0.75).toFixed(2)}`
+  const currentHoursSinceLastPayroll = hoursSinceLastPayroll + currentTime;
+  const currentGross = currentHoursSinceLastPayroll * 35;
+  const currentNet = currentGross * 0.75;
+  hoursSince.innerText = `${currentHoursSinceLastPayroll.toFixed(2)}hrs`;
+  hoursSince.title = `Est. net: $${currentNet.toFixed(2)}\nGross: ${currentGross.toFixed(2)}`
   hoursSinceDate.innerText = new Date(data?.lastPayroll || 0).toLocaleDateString() || '';
   const hoursSinceInput = document.getElementById('hoursSinceInput');
   const hoursSinceSubmit = document.getElementById('hoursSinceSubmit');
